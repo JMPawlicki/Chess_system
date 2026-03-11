@@ -2,7 +2,7 @@ function side = fenSideToMove(fen)
 parts = split(string(strtrim(fen)));
 if numel(parts) < 2
     side = "?";
-    return;
+else
+    side = parts(2);   % scalar string
 end
-side = parts(2); % "w" or "b"
 end

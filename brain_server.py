@@ -198,9 +198,9 @@ class GameSession:
         self._state = STATE_IDLE
 
     def _handle_ready(self):
-        if self._state != STATE_IDLE:
-            self.send("ERROR READY requires IDLE state; send NEW_GAME first")
-            return
+        #if self._state != STATE_IDLE:
+        #    self.send("ERROR READY requires IDLE state; send NEW_GAME first")
+        #    return
         self._stockfish.set_depth(self._depth)
         self._stockfish.set_fen_position(self._chess_board.fen())
         self.send("READY_OK")
