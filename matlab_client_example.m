@@ -74,12 +74,13 @@ while true
         send_cmd(t, 'GET_BEST_MOVE');
 
     elseif startsWith(msg, 'BEST_MOVE')
-        % Engine move received.  Move the robot arm here, then confirm.
         parts = strsplit(msg);
         engine_uci = parts{2};
         fprintf('Robot should execute move: %s\n', engine_uci);
-        % TODO: command robot arm using engine_uci
-        % After robot finishes:
+
+        % For testing (no robot integration yet):
+        input('Execute the move physically / with the robot, then press Enter...', 's');
+        pause(1.0);  % give DGT time to stop sending packets / vibrations to settle
         send_cmd(t, 'ENGINE_MOVE_DONE');
 
     elseif startsWith(msg, 'PROMOTION_REQUIRED')

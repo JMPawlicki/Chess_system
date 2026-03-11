@@ -41,7 +41,7 @@ STOCKFISH_PATH = "./stockfish/stockfish-windows-x86-64-avx2.exe"
 
 DGT_REQ_UPDATE_BOARD = bytes([0x44])
 SEGMENT_TIMEOUT = 2.5   # seconds of silence before treating segments as a move
-DEBOUNCE_WINDOW = 0.5   # seconds after ENGINE_MOVE_DONE before re-enabling DGT
+DEBOUNCE_WINDOW = 1.5   # seconds after ENGINE_MOVE_DONE before re-enabling DGT
 
 # ---------------------------------------------------------------------------
 # State constants
