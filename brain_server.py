@@ -144,6 +144,8 @@ class GameSession:
             elif cmd == "DEBUG_SET_FEN":
                 fen = " ".join(parts[1:])
                 self._handle_debug_set_fen(fen)
+            elif cmd == "GET_FEN":
+                self._handle_get_fen()
             else:
                 self.send(f"ERROR Unknown command: {cmd}")
         return True
@@ -294,7 +296,7 @@ class GameSession:
             # python-chess uses a1=0..h8=63 already
             arr[sq] = p.symbol()  # 'P','p','N','n', etc.
         self._board = arr
-        
+
     def _maybe_handle_human_promotion(self, uci: str) -> bool:
         """
         Returns True if promotion flow was started and the caller should stop.
@@ -323,7 +325,11 @@ class GameSession:
         self._state = STATE_WAITING_PROMOTION
         self.send(f"PROMOTION_REQUIRED {uci}")
         return True
-    
+    def _handle_get_fen(self):
+        # Send current python-chess FEN (single line)
+        fen = self._chess_board.fen()
+        self.send(f"FEN {fen}")
+
     # ------------------------------------------------------------------
     # DGT processing (called with _lock held)
     # ------------------------------------------------------------------
