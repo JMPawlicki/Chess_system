@@ -141,6 +141,9 @@ class GameSession:
                 self._handle_promote(parts[1:])
             elif cmd == "SHUTDOWN":
                 return False
+            elif cmd == "DEBUG_SET_FEN":
+                fen = " ".join(parts[1:])
+                self._handle_debug_set_fen(fen)
             else:
                 self.send(f"ERROR Unknown command: {cmd}")
         return True
@@ -261,6 +264,66 @@ class GameSession:
         if not self._check_game_over():
             self._state = STATE_ENGINE_TURN
 
+    def _handle_debug_set_fen(self, fen: str):
+        try:
+            # Reset all pending state so we don't carry old engine moves/promotions
+            self._pending_engine_move = None
+            self._pending_promotion_uci_base = None
+
+            self._chess_board.set_fen(fen)
+            self._stockfish.set_fen_position(fen)
+            self._sync_dgt_board_from_chess()
+
+            # Decide whose turn it should be next based on the FEN + configured human color
+            side_to_move_is_white = (self._chess_board.turn == chess.WHITE)
+            human_to_move = (side_to_move_is_white == self._human_is_white)
+
+            self._state = STATE_HUMAN_TURN if human_to_move else STATE_ENGINE_TURN
+
+            self.send("DEBUG_FEN_OK")
+        except Exception as e:
+            self.send(f"ERROR Invalid FEN: {e}")
+
+    def _sync_dgt_board_from_chess(self):
+        """Sync the internal 64-element DGT mirror board from python-chess board."""
+        arr = [None] * 64
+        for sq in chess.SQUARES:
+            p = self._chess_board.piece_at(sq)
+            if p is None:
+                continue
+            # python-chess uses a1=0..h8=63 already
+            arr[sq] = p.symbol()  # 'P','p','N','n', etc.
+        self._board = arr
+        
+    def _maybe_handle_human_promotion(self, uci: str) -> bool:
+        """
+        Returns True if promotion flow was started and the caller should stop.
+        Returns False if move can be applied normally.
+        """
+        if len(uci) != 4:
+            return False
+
+        try:
+            mv = chess.Move.from_uci(uci)
+        except Exception:
+            return False
+
+        piece = self._chess_board.piece_at(mv.from_square)
+        if piece is None or piece.piece_type != chess.PAWN:
+            return False
+
+        to_rank = chess.square_rank(mv.to_square)  # 0..7
+        if piece.color == chess.WHITE and to_rank != 7:
+            return False
+        if piece.color == chess.BLACK and to_rank != 0:
+            return False
+
+        # It's a pawn reaching last rank => promotion required
+        self._pending_promotion_uci_base = uci
+        self._state = STATE_WAITING_PROMOTION
+        self.send(f"PROMOTION_REQUIRED {uci}")
+        return True
+    
     # ------------------------------------------------------------------
     # DGT processing (called with _lock held)
     # ------------------------------------------------------------------
@@ -314,21 +377,54 @@ class GameSession:
             self._state = STATE_WAITING_PROMOTION
             self.send(f"PROMOTION_REQUIRED {uci_base}")
             return
-
+        
+        # If a human pawn reaches the last rank, DGT reports only the base move (e.g. e7e8).
+        # Promotions must be completed via PROMOTION_REQUIRED -> PROMOTE <q|r|b|n>.
+        if self._maybe_handle_human_promotion(uci_base):
+            return
         self._apply_human_move(uci_base)
 
     def _apply_human_move(self, uci):
         """Validate and push a human move; emit HUMAN_MOVE or ERROR."""
         try:
+            # --- DEBUG (start) ---
+            #print(f"[DEBUG] _apply_human_move called with uci={uci}")
+            #print(f"[DEBUG] turn={'white' if self._chess_board.turn == chess.WHITE else 'black'}")
+            #print(f"[DEBUG] FEN={self._chess_board.fen()}")
+            # --- DEBUG (end) ---
+
             move_obj = chess.Move.from_uci(uci)
+
             if move_obj not in self._chess_board.legal_moves:
+                # --- DEBUG (illegal) ---
+                promo_candidates = []
+                if len(uci) == 4:
+                    # If this is a 4-char move like e7e8, show what promotion moves exist
+                    base = uci
+                    for p in ["q", "r", "b", "n"]:
+                        try:
+                            m = chess.Move.from_uci(base + p)
+                            if m in self._chess_board.legal_moves:
+                                promo_candidates.append(base + p)
+                        except Exception:
+                            pass
+                legal_sample = [m.uci() for m in list(self._chess_board.legal_moves)[:30]]
+                #print(f"[DEBUG] illegal uci={uci}")
+                #print(f"[DEBUG] promotion candidates for base={uci}: {promo_candidates}")
+                #print(f"[DEBUG] first legal moves: {legal_sample}")
+                # --- DEBUG end ---
+
                 self.send(f"ERROR Illegal move: {uci}")
                 return
+
             self._chess_board.push_uci(uci)
             self._stockfish.set_fen_position(self._chess_board.fen())
+
         except Exception as exc:
+            #print(f"[DEBUG] exception applying uci={uci}: {exc}")
             self.send(f"ERROR applying move {uci}: {exc}")
             return
+
         self.send(f"HUMAN_MOVE {uci}")
         if not self._check_game_over():
             self._state = STATE_ENGINE_TURN

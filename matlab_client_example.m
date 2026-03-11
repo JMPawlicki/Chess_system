@@ -55,6 +55,9 @@ send_cmd(t, 'NEW_GAME');
 % Signal that MATLAB is ready
 send_cmd(t, 'READY');
 
+% Set desired position using function below
+%send_cmd(t, 'DEBUG_SET_FEN 7k/4P3/8/8/8/8/8/7K w - - 0 1');
+
 % Expect READY_OK
 msg = recv_msg(t);
 if ~strcmp(msg, 'READY_OK')
@@ -84,9 +87,14 @@ while true
         send_cmd(t, 'ENGINE_MOVE_DONE');
 
     elseif startsWith(msg, 'PROMOTION_REQUIRED')
-        % Human pawn reached the last rank.
-        % Default to queen; replace 'q' with the desired piece if needed.
-        send_cmd(t, 'PROMOTE q');
+        parts = strsplit(msg);
+        base = parts{2}; %#ok<NASGU>
+        p = lower(strtrim(input('Promotion piece (q/r/b/n): ', 's')));
+        if ~ismember(p, {'q','r','b','n'})
+            p = 'q';
+            fprintf('Invalid choice; defaulting to q.\n');
+        end
+        send_cmd(t, ['PROMOTE ', p]);
 
     elseif startsWith(msg, 'GAME_OVER')
         parts = strsplit(msg);
