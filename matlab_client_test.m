@@ -1,6 +1,6 @@
-% matlab_client_example.m
+% matlab_client_test.m
 %
-% Example MATLAB client for brain_server.py.
+% Test MATLAB client for brain_server.py.
 %
 % Demonstrates the full command/event flow:
 %   CONFIG -> NEW_GAME -> READY -> READY_OK
