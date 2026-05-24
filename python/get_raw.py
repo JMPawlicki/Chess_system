@@ -34,7 +34,7 @@ def decode_segments_to_uci(segments):
 # Połączenie z DGT Board
 # ===========================
 
-ser = serial.Serial("COM6", 38400, timeout=0.1)
+ser = serial.Serial("COM5", 38400, timeout=0.1)
 DTG_REQ_UPDATE_BOARD = bytes([0x44])
 
 print("Połączono z DGT, oczekiwanie na ruchy...")

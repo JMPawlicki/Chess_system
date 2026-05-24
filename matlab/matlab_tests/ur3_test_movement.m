@@ -2,12 +2,12 @@ ip = '192.168.0.10';
 ur = tcpclient(ip, 30002, "Timeout", 3);
 
 % Fill these with your pendant values in degrees:
-q_deg = [0, -90, 0, -90, 0, 0];   % <-- example only!
+q_deg = [0, -135, 45, -70, -90, 0];   % <-- example only!
 
 q = deg2rad(q_deg);
 
-a = 0.3;   % acceleration (rad/s^2) conservative
-v = 0.3;   % speed (rad/s) conservative
+a = 0.2;   % acceleration (rad/s^2) conservative
+v = 0.2;   % speed (rad/s) conservative
 
 script = sprintf([ ...
     'def matlab_go_home():\n' ...

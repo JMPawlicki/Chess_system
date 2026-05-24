@@ -15,23 +15,16 @@ axis(ax, [0 8 0 8]);
 ax.XTick = [];
 ax.YTick = [];
 ax.YDir = 'normal';
-
-% ---------------------------
-% Dynamic piece font sizing
-% ---------------------------
-axPix = getpixelposition(ax, true);   % [x y w h] in pixels
-squarePix = min(axPix(3), axPix(4)) / 8; % square size (approx) in pixels
-
-% Tune these to taste:
-pieceFont = round(squarePix * 0.88);  % 0.70-0.85 usually looks good
-pieceFont = max(18, min(160, pieceFont)); % clamp so it doesn't get silly
+ax.Clipping = 'on';
 
 light = [0.93 0.93 0.90];
 dark  = [0.45 0.55 0.65];
 
+pieceFontSize = boardPieceFontSize(ax);
+
 for r = 1:8
     for c = 1:8
-        isDark = mod(r + c, 2) == 0;
+        isDark = mod(r + c, 2) == 1;
         color = light;
         if isDark
             color = dark;
@@ -55,10 +48,33 @@ for r = 1:8
             text(ax, x+0.5, y+0.5, pieceGlyph(p), ...
                 'HorizontalAlignment', 'center', ...
                 'VerticalAlignment', 'middle', ...
-                'FontSize', pieceFont);
+                'FontSize', pieceFontSize, ...
+                'Clipping','on');
         end
     end
 end
 
 hold(ax, 'off');
+end
+
+
+function fs = boardPieceFontSize(ax)
+%BOARDPIECEFONTSIZE Dynamic chess piece font size based on axes size.
+
+    try
+        oldUnits = ax.Units;
+        ax.Units = "pixels";
+        pos = ax.Position;
+        ax.Units = oldUnits;
+
+        boardPx = min(pos(3), pos(4));
+
+        fs = round(boardPx / 10);
+
+        % Ograniczenia, żeby nie było ani za małe, ani absurdalnie duże.
+        fs = max(10, min(fs, 100));
+
+    catch
+        fs = 32; % fallback
+    end
 end
