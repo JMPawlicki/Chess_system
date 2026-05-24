@@ -232,12 +232,12 @@ All messages between MATLAB and Python are newline-delimited UTF-8 strings over 
 
 | Command | Description |
 |---------|-------------|
-| `CONFIG depth=<1-20> human=<white|black> mode=<human_vs_robot|computer_vs_computer>` | Configure engine depth, human side and operation mode. |
+| `CONFIG depth=<1-20> human=<white/black> mode=<human_vs_robot/computer_vs_computer>` | Configure engine depth, human side and operation mode. |
 | `NEW_GAME` | Reset game state to the starting position. |
 | `READY` | Confirm that the physical board is prepared and the game may proceed. |
 | `GET_BEST_MOVE` | Request the next engine/robot move. Valid only when the backend is in engine-turn state. |
 | `ROBOT_MOVE_DONE` | Confirm that MATLAB/UR3 has completed the robot move. |
-| `PROMOTE <q|r|b|n>` | Complete a human promotion after `PROMOTION_REQUIRED`. |
+| `PROMOTE <q/r/b/n>` | Complete a human promotion after `PROMOTION_REQUIRED`. |
 | `DEBUG_SET_FEN <fen>` | Load a custom FEN position for testing. |
 | `GET_FEN` | Request the current backend FEN. |
 | `STATUS` | Request backend and DGT board status. |
@@ -250,7 +250,7 @@ All messages between MATLAB and Python are newline-delimited UTF-8 strings over 
 | `READY_OK` | Backend accepted `READY`. |
 | `BOARD_OK` | DGT board is connected. |
 | `BOARD_ERROR <text>` | DGT board is not connected or another board error occurred. |
-| `STATUS backend=ok board=<ok|error>` | Backend status response. |
+| `STATUS backend=ok board=<ok/error>` | Backend status response. |
 | `FEN <fen>` | Current game position. |
 | `HUMAN_MOVE <uci>` | Legal human move detected from the DGT board. |
 | `ROBOT_MOVE ...` | Full symbolic description of the robot move to execute. |
