@@ -33,7 +33,7 @@ ChessRobot/
 │   ├── generateQueenPickData.m
 │   ├── append*.m
 │   ├── drawBoardFromFen.m
-│   └── other helper functions
+│   └── other helper functions and tests
 │
 └── docs/
     ├── python_backend_documentation.md
