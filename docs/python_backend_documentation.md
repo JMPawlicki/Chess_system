@@ -28,6 +28,14 @@ The backend is responsible for:
 
 ---
 
+---
+
+## Current normal-mode execution principle
+
+In the normal backend, an engine move is first sent to MATLAB as `ROBOT_MOVE` and stored as `_pending_engine_move`. The move is not pushed to the logical chess board at this point. During robot execution, DGT updates are used to update the physical board mirror. After `ROBOT_DONE` and `ROBOT_MOVE_DONE`, the backend compares the physical mirror with the expected state after the pending move. Only a matching board state allows the move to be committed.
+
+This is the main difference between the normal backend and the safe/manual backend, where the pending engine move is accepted after operator/robot confirmation without full physical-board comparison.
+
 ## Main constants
 
 ### Network constants
@@ -48,7 +56,7 @@ The backend is responsible for:
 | `SERIAL_TIMEOUT` | Serial read timeout in seconds. |
 | `DGT_REQ_UPDATE_BOARD` | DGT board update request byte sequence. |
 | `SEGMENT_TIMEOUT` | Silence time after which accumulated DGT segments are interpreted as a human move. |
-| `ROBOT_SEGMENT_TIMEOUT` | Shorter timeout used while observing DGT updates during robot motion in normal mode. |
+| `ROBOT_SEGMENT_TIMEOUT` | Legacy/experimental robot-observation timeout. In the current normal backend, robot DGT observation is closed by `ROBOT_DONE` rather than by this timeout. |
 | `DEBOUNCE_WINDOW` | Delay before re-enabling human DGT input after a robot move. |
 | `ROBOT_DONE_DGT_SETTLE` | Delay after UR3 reports completion before forwarding completion to the GUI, giving DGT time to settle. |
 
@@ -97,7 +105,7 @@ The backend is responsible for:
 | `DEBUG_SET_FEN` | full FEN | Replaces the current board state for testing. |
 | `GET_FEN` | none | Requests the current logical FEN. |
 | `STATUS` | none | Requests backend/DGT status. |
-| `QUIT` | none | Sends `BYE` and schedules process shutdown. |
+| `QUIT` / `SHUTDOWN` | none | Sends `BYE` and schedules process shutdown. |
 
 ### Python → MATLAB
 
@@ -188,7 +196,7 @@ The backend is responsible for:
 - Opens serial connection to `SERIAL_PORT`.
 - Sends `BOARD_OK` or `BOARD_ERROR` to GUI.
 - Accumulates 5-byte DGT segments starting with `0x8e`.
-- Uses `SEGMENT_TIMEOUT` normally and `ROBOT_SEGMENT_TIMEOUT` while robot motion is being observed in normal mode.
+- Uses `SEGMENT_TIMEOUT` to close ordinary human-move segment groups. In the normal backend, robot-move observation is accumulated while `STATE_WAITING_ENGINE_DONE` is active and is finalized when `ROBOT_DONE` is processed.
 
 **Normal vs safe behavior:**
 
@@ -214,7 +222,7 @@ The backend is responsible for:
 - Accepts short-lived UR3 connections.
 - Normalizes messages such as literal `ROBOT_DONE\n` into `ROBOT_DONE`.
 - Sends `ROBOT_DONE` to MATLAB.
-- In normal mode, waits `ROBOT_DONE_DGT_SETTLE` before forwarding, allowing DGT updates to settle.
+- In normal mode, waits `ROBOT_DONE_DGT_SETTLE` before forwarding, allowing DGT updates to settle before MATLAB sends `ROBOT_MOVE_DONE`.
 
 ---
 

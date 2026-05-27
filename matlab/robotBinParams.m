@@ -21,7 +21,7 @@ function binParams = robotBinParams()
     binParams.Q_BIN_HIGH = deg2rad(binParams.Q_BIN_HIGH_deg);
 
     % Drop pose above/inside the bin.
-    binParams.P_BIN_DROP = [-502, -451, 162, 1.185, 2.959, -0.883];
+    binParams.P_BIN_DROP = [-512, -451, 162, 1.185, 2.959, -0.883];
 
     % Optional aliases used by some scripts.
     binParams.Q_HIGH = binParams.Q_BIN_HIGH;

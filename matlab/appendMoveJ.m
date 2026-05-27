@@ -19,5 +19,4 @@ function script = appendMoveJ(script, q, a_joint, v_joint)
         q(1), q(2), q(3), q(4), q(5), q(6), ...
         a_joint, v_joint);
 
-    script = script + "  sleep(0.1)" + newline;
 end

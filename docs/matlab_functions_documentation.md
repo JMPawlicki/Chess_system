@@ -273,7 +273,7 @@ Each slot contains:
 commParams = robotCommParams()
 ```
 
-**Purpose:** Returns communication parameters used by UR3 to notify Python that robot motion is complete.
+**Purpose:** Returns communication parameters used by UR3 to notify the Python backend that robot motion is complete.
 
 **Arguments:** none.
 
@@ -285,7 +285,7 @@ commParams = robotCommParams()
 
 | Field | Meaning |
 |---|---|
-| `pcIp` | IP address of the PC on the UR3 network. |
+| `pcIp` | IP address of the PC on the UR3 network. This must match the address reachable from the robot controller. |
 | `robotDonePort` | Port listened to by Python for UR3 `ROBOT_DONE`. |
 | `socketName` | URScript socket name. |
 
@@ -466,7 +466,7 @@ Converts XYZ coordinates from millimetres to metres.
 
 ## `appendMoveJ(script, q, a_joint, v_joint)`
 
-**Purpose:** Appends one URScript `movej` command and a short sleep.
+**Purpose:** Appends one URScript `movej` command.
 
 **Arguments:**
 
@@ -489,7 +489,7 @@ Converts XYZ coordinates from millimetres to metres.
 
 ## `appendMoveL(script, p, a_lin, v_lin)`
 
-**Purpose:** Appends one URScript `movel` command and a short sleep.
+**Purpose:** Appends one URScript `movel` command and a short settling sleep.
 
 **Arguments:**
 
@@ -803,6 +803,12 @@ Safely extracts a string field from the parsed robot-move info struct.
 Normalizes piece identifiers to `P`, `N`, `B`, `R`, `Q`, or `K`.
 
 ---
+
+---
+
+## Motion blending note
+
+URScript blending with the `r` parameter was considered as a possible way to smooth transitions. In testing, however, blending caused the TCP/tool orientation to change before the calibrated high pose was reached. Because the passive fork gripper depends on a stable orientation while carrying a chess piece, blending was not included in the final motion sequence. The final helper functions therefore generate explicit `movej` and `movel` commands without blended corner cutting.
 
 # GUI board drawing helpers
 

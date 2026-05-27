@@ -31,17 +31,29 @@ function params = robotPieceParams()
     params.pieceZ.N = 41.0;
     params.pieceZ.B = 63.5;
     params.pieceZ.R = 66.0;
-    params.pieceZ.Q = 75.0;
+    params.pieceZ.Q = 74.5;
     params.pieceZ.K = 78.0;
 
     %% Insert offsets measured on A1 [mm]
     params.pieceInsertXY = struct();
     params.pieceInsertXY.P = [13, 27];
     params.pieceInsertXY.N = [14, 14];
-    params.pieceInsertXY.B = [19, 27];
+    params.pieceInsertXY.B = [18, 25];
     params.pieceInsertXY.R = [16, 20];
     params.pieceInsertXY.Q = [17, 25];
     params.pieceInsertXY.K = [15, 25];
+    
+    %% Place backoff correction [mm]
+    % Used only when placing a piece on the target square.
+    % Positive value means that the piece is placed slightly less deep
+    % along the insert direction, so it ends up closer to the square center.
+    
+    params.placeBackoff.P = 5.0;
+    params.placeBackoff.N = 5.0;
+    params.placeBackoff.B = 5.0;
+    params.placeBackoff.R = 6.0;
+    params.placeBackoff.Q = 6.0;
+    params.placeBackoff.K = 6.5;
 
     %% Insert vector lengths [mm]
     params.pieceInsertLen = struct();

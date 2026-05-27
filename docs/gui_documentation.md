@@ -8,6 +8,14 @@ A separate `ChessRobotGUI_safe.mlapp` variant may exist for manual testing. The 
 
 ---
 
+---
+
+## Current implementation status
+
+The normal GUI is the automatic operating version. Manual confirmation controls used during early safe-mode testing are removed or automated. Robot motion is started after a `ROBOT_MOVE` message is parsed, and completion is handled through the `ROBOT_DONE` / `ROBOT_MOVE_DONE` loop.
+
+The safe GUI remains useful for calibration and debugging because it allows additional operator confirmation between stages.
+
 ## High-level responsibilities
 
 The GUI is responsible for:
@@ -507,7 +515,7 @@ These are declared in `properties (Access = private)`.
 - Runs backend with Windows `start` and `cmd /c`.
 - Logs full command.
 
-**Recommended path logic after moving Python files:**
+**Current path logic after moving Python files:**
 
 ```matlab
 here = fileparts(mfilename('fullpath'));
@@ -735,7 +743,7 @@ The normal GUI removes/automates these actions through:
 
 `RobotBusy` prevents a second `ROBOT_MOVE` from being accepted while the previous robot action is still in progress.
 
-It is set to `true` when a `ROBOT_MOVE` is accepted and reset to `false` on `ROBOT_DONE` or failed-move recovery.
+It is set to `true` when a `ROBOT_MOVE` is accepted and reset to `false` on `ROBOT_DONE`, `ROBOT_MOVE_FAILED`, or recovery.
 
 ## `useHome`
 
@@ -746,5 +754,5 @@ The GUI passes `useHome` to `executeRobotMove()`:
 
 ## `LastLegalFen`
 
-`LastLegalFen` is used as the visual recovery target. It is updated whenever a FEN is received from the backend and displayed on the board.
+`LastLegalFen` is used as the visual recovery target. It stores the last backend FEN accepted by the GUI and is redrawn when the operator must restore the physical board after an illegal or failed move.
 

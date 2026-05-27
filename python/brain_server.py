@@ -46,6 +46,10 @@ DGT_REQ_UPDATE_BOARD = bytes([0x44])
 SEGMENT_TIMEOUT = 2.5   # seconds of silence before treating segments as a move
 DEBOUNCE_WINDOW = 1.5   # seconds after ENGINE_MOVE_DONE before re-enabling DGT
 
+
+#ROBOT_SEGMENT_TIMEOUT = 0.6  # currently unused; robot observation closes on ROBOT_DONE
+ROBOT_DONE_DGT_SETTLE = 0.1
+
 # ---------------------------------------------------------------------------
 # State / mode constants
 # ---------------------------------------------------------------------------
@@ -68,6 +72,11 @@ def square_id_to_uci(square):
     file = 7 - (square % 8)
     rank = square // 8
     return chr(ord('a') + file) + str(rank + 1)
+
+
+def dgt_id_to_chess_square(square):
+    """Convert a DGT square ID to python-chess square index."""
+    return chess.parse_square(square_id_to_uci(square))
 
 
 def initialize_board():
@@ -129,6 +138,11 @@ class GameSession:
         self._pending_engine_move = None
         self._pending_promotion_uci_base = None
 
+        
+        self._robot_observed_segments = False
+        self._robot_physical_mismatch = False
+        self._robot_done_received = False
+
         # Robot inventory constraint: only one extra queen is available
         # for engine/robot promotions in a single game.
         self._engine_queen_promotion_used = {
@@ -144,7 +158,24 @@ class GameSession:
 
     def send(self, msg):
         self._send(msg)
+    
+    def is_waiting_engine_done(self):
+        with self._lock:
+            return self._state == STATE_WAITING_ENGINE_DONE
+        
+    def is_observing_robot_dgt(self):
+        """Return True while DGT segments should be collected for the robot move."""
+        with self._lock:
+            return (
+                self._state == STATE_WAITING_ENGINE_DONE
+                and not self._robot_done_received
+            )
 
+    def mark_robot_done_observed(self):
+        """Close the robot DGT observation window after UR3 reports ROBOT_DONE."""
+        with self._lock:
+            self._robot_done_received = True
+    
     def set_board_connected(self):
         with self._lock:
             self._board_connected = True
@@ -189,7 +220,7 @@ class GameSession:
                 self._handle_get_fen()
             elif cmd == "STATUS":
                 self._handle_status()
-            elif cmd == "QUIT":
+            elif cmd in ("QUIT", "SHUTDOWN"):
                 self._handle_quit()
                 return False
             else:
@@ -198,15 +229,27 @@ class GameSession:
 
     def handle_dgt_segments(self, segments):
         """
-        Process a completed group of DGT segments (called from DGT thread).
-        DGT input is ignored unless the state is STATE_HUMAN_TURN.
-        In computer-vs-computer mode, DGT human input is ignored completely.
+        Process DGT segment groups.
+
+        HUMAN_TURN:
+            interpret segments as human move.
+
+        WAITING_ENGINE_DONE:
+            observe physical robot movement and update only the DGT mirror board.
+            Do not push chess move here.
         """
+        
         with self._lock:
+            if self._state == STATE_WAITING_ENGINE_DONE:
+                self._observe_robot_dgt_segments(segments)
+                return
+
             if self._mode != MODE_HUMAN_VS_ROBOT:
                 return
+            
             if self._state != STATE_HUMAN_TURN:
                 return
+            
             self._process_dgt_segments(segments)
 
     # ------------------------------------------------------------------
@@ -254,6 +297,7 @@ class GameSession:
         self._board = initialize_board()
         self._pending_engine_move = None
         self._pending_promotion_uci_base = None
+        self._robot_done_received = False
         self._engine_queen_promotion_used = {
             "white": False,
             "black": False,
@@ -320,7 +364,16 @@ class GameSession:
 
         robot_move_msg = self._build_robot_move_message(move)
 
+        # Start robot observation from the current logical position.
+        # This prevents old missed DGT events from causing false mismatches.
+        self._sync_dgt_board_from_chess()
+
         self._pending_engine_move = move
+        self._robot_observed_segments = False
+        self._robot_physical_mismatch = False
+        self._robot_done_received = False
+
+        # This opens the robot-DGT observation window.
         self._state = STATE_WAITING_ENGINE_DONE
         self.send(robot_move_msg)
 
@@ -514,41 +567,112 @@ class GameSession:
 
         return None
 
+    # def _handle_engine_move_done(self):
+    #     if self._state != STATE_WAITING_ENGINE_DONE:
+    #         self.send("ERROR ENGINE_MOVE_DONE requires WAITING_ENGINE_DONE state")
+    #         return
+    #     if self._pending_engine_move:
+    #         try:
+    #             executed_engine_move = self._pending_engine_move
+            
+    #             promotion_color = None
+    #             if self._is_queen_promotion_move(executed_engine_move):
+    #                 promotion_color = "white" if self._chess_board.turn == chess.WHITE else "black"
+            
+    #             self._chess_board.push_uci(executed_engine_move)
+            
+    #             if promotion_color is not None:
+    #                 self._engine_queen_promotion_used[promotion_color] = True
+            
+    #             self._stockfish.set_fen_position(self._chess_board.fen())
+            
+    #         except Exception as exc:
+    #             self.send(f"ERROR applying engine move: {exc}")
+    #             return
+    #         self._pending_engine_move = None
+    #     if self._check_game_over():
+    #         return
+
+    #     if self._mode == MODE_COMPUTER_VS_COMPUTER:
+    #         # The robot/engine plays both sides.  After the operator confirms the
+    #         # robot move, the GUI may request the next BEST_MOVE immediately.
+    #         self._state = STATE_ENGINE_TURN
+    #     else:
+    #         # Debounce: remain in WAITING_ENGINE_DONE until window expires,
+    #         # then transition to HUMAN_TURN (via background thread).
+    #         threading.Thread(target=self._debounce_to_human_turn, daemon=True).start()
+    
     def _handle_engine_move_done(self):
         if self._state != STATE_WAITING_ENGINE_DONE:
             self.send("ERROR ENGINE_MOVE_DONE requires WAITING_ENGINE_DONE state")
             return
+
         if self._pending_engine_move:
+            expected_board = self._expected_board_after_pending_engine_move()
+
+            if expected_board is None:
+                self.send("ERROR no expected board for pending engine move")
+                return
+
+            if self._robot_physical_mismatch or self._board != expected_board:
+                diff = self._board_diff_summary(expected_board, self._board)
+
+                failed_move = self._pending_engine_move
+
+                self.send(
+                    f"ROBOT_MOVE_FAILED expected={failed_move} reason=board_mismatch diff={diff}"
+                )
+
+                # Do NOT push the move.
+                # Return to a recovery-like state. The GUI should stop automatic play.
+                self._pending_engine_move = None
+                self._robot_observed_segments = False
+                self._robot_physical_mismatch = False
+                self._robot_done_received = False
+
+                # Keep python-chess on last legal position.
+                self._stockfish.set_fen_position(self._chess_board.fen())
+
+                if self._mode == MODE_COMPUTER_VS_COMPUTER:
+                    self._state = STATE_IDLE
+                else:
+                    self._state = STATE_HUMAN_TURN
+
+                return
+
             try:
                 executed_engine_move = self._pending_engine_move
-            
+
                 promotion_color = None
                 if self._is_queen_promotion_move(executed_engine_move):
                     promotion_color = "white" if self._chess_board.turn == chess.WHITE else "black"
-            
+
                 self._chess_board.push_uci(executed_engine_move)
-            
+
                 if promotion_color is not None:
-                    self._engine_queen_promotion_used[promotion_color] = True
-            
+                    if isinstance(self._engine_queen_promotion_used, dict):
+                        self._engine_queen_promotion_used[promotion_color] = True
+                    else:
+                        self._engine_queen_promotion_used = True
+
                 self._stockfish.set_fen_position(self._chess_board.fen())
-            
+
             except Exception as exc:
                 self.send(f"ERROR applying engine move: {exc}")
                 return
+
             self._pending_engine_move = None
+            self._robot_observed_segments = False
+            self._robot_physical_mismatch = False
+            self._robot_done_received = False
+
         if self._check_game_over():
             return
 
         if self._mode == MODE_COMPUTER_VS_COMPUTER:
-            # The robot/engine plays both sides.  After the operator confirms the
-            # robot move, the GUI may request the next BEST_MOVE immediately.
             self._state = STATE_ENGINE_TURN
         else:
-            # Debounce: remain in WAITING_ENGINE_DONE until window expires,
-            # then transition to HUMAN_TURN (via background thread).
             threading.Thread(target=self._debounce_to_human_turn, daemon=True).start()
-
     def _handle_promote(self, args):
         if self._state != STATE_WAITING_PROMOTION:
             self.send("ERROR PROMOTE requires WAITING_PROMOTION state")
@@ -642,6 +766,178 @@ class GameSession:
     # ------------------------------------------------------------------
     # DGT processing (called with _lock held)
     # ------------------------------------------------------------------
+    #NOWE
+    def _observe_robot_dgt_segments(self, current_segments):
+        """
+        Update physical DGT mirror during robot movement.
+
+        This does not validate or push chess moves. It only updates self._board
+        so that _handle_engine_move_done() can compare physical board with the
+        expected board after the robot move.
+        """
+        if not self._pending_engine_move:
+            return
+
+        try:
+            self._apply_robot_segments_to_mirror(current_segments)
+            self._robot_observed_segments = True
+        except Exception as exc:
+            self._robot_physical_mismatch = True
+            print(f"[ROBOT_OBSERVE] Failed to apply DGT segments: {exc}")
+    
+    def _apply_robot_segments_to_mirror(self, current_segments):
+        """
+        Apply DGT segment group to self._board during robot move.
+
+        DGT segment square IDs are converted to python-chess square indices
+        before updating self._board, because expected_board is indexed using
+        python-chess squares.
+        """
+        n = len(current_segments)
+
+        if n == 1:
+            sq_idx = dgt_id_to_chess_square(current_segments[0][3])
+
+            try:
+                move_obj = chess.Move.from_uci(self._pending_engine_move)
+            except Exception:
+                return
+
+            src_idx = move_obj.from_square
+            dst_idx = move_obj.to_square
+
+            # Castling: pending move only describes the king move,
+            # but the robot also moves the rook.
+            if self._chess_board.is_castling(move_obj):
+                rank = chess.square_rank(src_idx)
+
+                if chess.square_file(dst_idx) > chess.square_file(src_idx):
+                    rook_from = chess.square(7, rank)
+                    rook_to   = chess.square(5, rank)
+                else:
+                    rook_from = chess.square(0, rank)
+                    rook_to   = chess.square(3, rank)
+
+                if sq_idx == rook_from:
+                    self._board[rook_from] = None
+                    return
+
+                if sq_idx == rook_to:
+                    rook_piece = chess.Piece(chess.ROOK, self._chess_board.turn)
+                    self._board[rook_to] = rook_piece.symbol()
+                    return
+
+            # Robot picked up the moving piece from the source square.
+            if sq_idx == src_idx:
+                self._board[src_idx] = None
+                return
+
+            # En passant captured pawn square.
+            if self._chess_board.is_en_passant(move_obj):
+                capture_sq = chess.square(chess.square_file(dst_idx), chess.square_rank(src_idx))
+                if sq_idx == capture_sq:
+                    self._board[capture_sq] = None
+                    return
+
+            # Robot placed the moving piece on the destination square.
+            # For normal captures this can also be called after the captured
+            # piece has already been removed.
+            if sq_idx == dst_idx:
+                piece = self._chess_board.piece_at(src_idx)
+
+                if piece is not None:
+                    piece_symbol = piece.symbol()
+
+                    # Promotion: physical piece becomes the promoted piece.
+                    if move_obj.promotion is not None:
+                        promoted = chess.piece_symbol(move_obj.promotion)
+                        piece_symbol = promoted.upper() if piece.color == chess.WHITE else promoted.lower()
+
+                    self._board[dst_idx] = piece_symbol
+
+                return
+
+            return
+
+        if n == 2:
+            src_idx = dgt_id_to_chess_square(current_segments[0][3])
+            dst_idx = dgt_id_to_chess_square(current_segments[1][3])
+
+            self._move_piece_on_mirror(src_idx, dst_idx)
+            return
+
+        if n == 3:
+            # Usually capture:
+            #   captured piece removed,
+            #   attacker removed,
+            #   attacker placed.
+            captured_idx = dgt_id_to_chess_square(current_segments[0][3])
+            src_idx = dgt_id_to_chess_square(current_segments[1][3])
+            dst_idx = dgt_id_to_chess_square(current_segments[2][3])
+
+            # En passant has captured square different from destination.
+            if captured_idx != dst_idx:
+                self._board[captured_idx] = None
+
+            self._move_piece_on_mirror(src_idx, dst_idx)
+            return
+
+        if n == 4:
+            squares = [dgt_id_to_chess_square(seg[3]) for seg in current_segments]
+            uci_squares = [chess.square_name(sq) for sq in squares]
+
+            # Castling detection
+            if "e1" in uci_squares and "g1" in uci_squares:
+                self._move_piece_on_mirror(chess.E1, chess.G1)
+                self._move_piece_on_mirror(chess.H1, chess.F1)
+                return
+
+            if "e1" in uci_squares and "c1" in uci_squares:
+                self._move_piece_on_mirror(chess.E1, chess.C1)
+                self._move_piece_on_mirror(chess.A1, chess.D1)
+                return
+
+            if "e8" in uci_squares and "g8" in uci_squares:
+                self._move_piece_on_mirror(chess.E8, chess.G8)
+                self._move_piece_on_mirror(chess.H8, chess.F8)
+                return
+
+            if "e8" in uci_squares and "c8" in uci_squares:
+                self._move_piece_on_mirror(chess.E8, chess.C8)
+                self._move_piece_on_mirror(chess.A8, chess.D8)
+                return
+
+            # Fallback: apply first two as a move.
+            src_idx = squares[0]
+            dst_idx = squares[1]
+            self._move_piece_on_mirror(src_idx, dst_idx)
+            return
+
+    
+    def _move_piece_on_mirror(self, src_idx, dst_idx):
+        if src_idx == dst_idx:
+            return
+
+        piece = self._board[src_idx]
+
+        # If this is robot promotion, the physical piece on destination should
+        # become promoted queen, not the original pawn.
+        if self._pending_engine_move:
+            try:
+                move_obj = chess.Move.from_uci(self._pending_engine_move)
+
+                if move_obj.promotion is not None:
+                    if src_idx == move_obj.from_square and dst_idx == move_obj.to_square:
+                        promoted = chess.piece_symbol(move_obj.promotion)
+                        if self._chess_board.turn == chess.WHITE:
+                            piece = promoted.upper()
+                        else:
+                            piece = promoted.lower()
+            except Exception:
+                pass
+
+        self._board[dst_idx] = piece
+        self._board[src_idx] = None
 
     def _process_dgt_segments(self, current_segments):
         n = len(current_segments)
@@ -777,8 +1073,46 @@ class GameSession:
         with self._lock:
             if self._state == STATE_WAITING_ENGINE_DONE:
                 self._state = STATE_HUMAN_TURN
+    
+    def _board_array_from_chess_board(self, board_obj):
+        arr = [None] * 64
 
+        for sq in chess.SQUARES:
+            piece = board_obj.piece_at(sq)
+            if piece is not None:
+                arr[sq] = piece.symbol()
 
+        return arr
+    
+    def _expected_board_after_pending_engine_move(self):
+        if not self._pending_engine_move:
+            return None
+
+        expected = self._chess_board.copy()
+        expected.push_uci(self._pending_engine_move)
+
+        return self._board_array_from_chess_board(expected)
+    
+    def _board_diff_summary(self, expected_board, physical_board, max_items=8):
+        diffs = []
+
+        for sq in chess.SQUARES:
+            expected_piece = expected_board[sq]
+            physical_piece = physical_board[sq]
+
+            if expected_piece != physical_piece:
+                diffs.append(
+                    f"{chess.square_name(sq)}:expected={expected_piece or 'empty'},physical={physical_piece or 'empty'}"
+                )
+
+        if not diffs:
+            return "none"
+
+        if len(diffs) > max_items:
+            return ";".join(diffs[:max_items]) + f";...(+{len(diffs)-max_items} more)"
+
+        return ";".join(diffs)
+    
 # ---------------------------------------------------------------------------
 # DGT polling thread
 # ---------------------------------------------------------------------------
@@ -815,12 +1149,32 @@ def dgt_thread(session, stop_event):
                 continue
             current_segments.append(segment)
             last_segment_time = current_time
+        #NOWE
+        # During robot movement, do not wait for a segment timeout.
+        # The robot can move slowly, so source and destination events may be far apart.
+        # Forward every observed segment immediately and keep the observation window
+        # open until ROBOT_DONE.
+        if session.is_waiting_engine_done():
+            if session.is_observing_robot_dgt():
+                if current_segments:
+                    session.handle_dgt_segments(list(current_segments))
+                    current_segments = []
+                    last_segment_time = None
+            else:
+                # Robot already reported ROBOT_DONE and the settle window has passed.
+                # Ignore any late/repeated DGT events until MATLAB confirms with
+                # ROBOT_MOVE_DONE.
+                current_segments = []
+                last_segment_time = None
 
-        if (current_segments and last_segment_time and
-                (current_time - last_segment_time > SEGMENT_TIMEOUT)):
-            session.handle_dgt_segments(list(current_segments))
-            current_segments = []
-            last_segment_time = None
+        else:
+            # Human move: keep timeout-based grouping, because human moves should
+            # be interpreted as complete move groups.
+            if (current_segments and last_segment_time and
+                    (current_time - last_segment_time > SEGMENT_TIMEOUT)):
+                session.handle_dgt_segments(list(current_segments))
+                current_segments = []
+                last_segment_time = None
 
         time.sleep(0.01)
 
@@ -874,7 +1228,16 @@ def robot_done_thread(session, stop_event):
                 print(f"[UR3_DONE] Received: {msg_raw}")
                 
                 if msg == "ROBOT_DONE":
+                    print("[UR3_DONE] ROBOT_DONE received from UR3")
+                    time.sleep(ROBOT_DONE_DGT_SETTLE)
+
+                    print("[UR3_DONE] Closing robot DGT observation window")
+                    session.mark_robot_done_observed()
+
+                    print("[UR3_DONE] Forwarding ROBOT_DONE to GUI")
                     session.send("ROBOT_DONE")
+
+                    print("[UR3_DONE] ROBOT_DONE forwarded to GUI")
                 else:
                     session.send(f"ERROR Unknown UR3_DONE message: {msg_raw}")
 

@@ -183,10 +183,33 @@ function moveData = generateTransferData(fromSquare, toSquare, movingPiece, regi
         scale = 1;
     end
 
+    %% Place-specific backoff correction
+    % This correction is applied only when placing the piece on the target square.
+    % It moves the final placing position slightly backwards along the insert
+    % direction, so the piece is not left too far forward on the square.
+    
+    placeBackoff_mm = 0;
+    
+    if isfield(pieceParams, "placeBackoff") && ...
+       isfield(pieceParams.placeBackoff, char(movingPiece))
+    
+        placeBackoff_mm = pieceParams.placeBackoff.(char(movingPiece));
+    end
+    
+    toPlaceVec = P_TO_INSERT_FLAT(1:2) - P_TO_APPROACH_LOW(1:2);
+    
+    if placeBackoff_mm ~= 0 && norm(toPlaceVec) > 1e-6
+    
+        toPlaceDir = toPlaceVec / norm(toPlaceVec);
+    
+        P_TO_INSERT_FLAT(1:2) = P_TO_INSERT_FLAT(1:2) - placeBackoff_mm * toPlaceDir;
+        P_TO_ROTATE_LOCK(1:2) = P_TO_INSERT_FLAT(1:2);
+        P_TO_LIFT_LOCKED(1:2) = P_TO_INSERT_FLAT(1:2);
+    end
     fprintf("pieceDeltaZFrom = %.2f mm\n", pieceDeltaZFrom);
     fprintf("pieceDeltaZTo = %.2f mm\n", pieceDeltaZTo);
     fprintf("insertScale = %.3f\n", scale);
-
+    fprintf("placeBackoff = %.2f mm\n", placeBackoff_mm);
     %% Convert XYZ mm -> m
 
     P_FROM_APPROACH_HIGH = xyzMmToM(P_FROM_APPROACH_HIGH);
@@ -229,7 +252,8 @@ function moveData = generateTransferData(fromSquare, toSquare, movingPiece, regi
     moveData.pieceDeltaZFrom = pieceDeltaZFrom;
     moveData.pieceDeltaZTo = pieceDeltaZTo;
     moveData.insertScale = scale;
-
+    moveData.placeBackoff = placeBackoff_mm;
+    
     moveData.Q_FROM_HIGH = Q_FROM_HIGH;
     moveData.Q_TO_HIGH   = Q_TO_HIGH;
 
