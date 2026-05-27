@@ -34,7 +34,7 @@ ChessRobot/
 │   ├── generateQueenPickData.m
 │   ├── append\*.m
 │   ├── drawBoardFromFen.m
-│   └── other helper functions
+│   └── other helper functions and tests
 │
 └── docs/
     ├── python\_backend\_documentation.md
@@ -231,6 +231,7 @@ All messages between MATLAB and Python are newline-delimited UTF-8 strings over 
 
 ### MATLAB -> Python
 
+<<<<<<< HEAD
 |Command|Description|
 |-|-|
 |`CONFIG depth=<1-20> human=<white/black> mode=<human\_vs\_robot/computer\_vs\_computer>`|Configure engine depth, human side and operation mode.|
@@ -261,6 +262,38 @@ All messages between MATLAB and Python are newline-delimited UTF-8 strings over 
 |`GAME\_OVER <result>`|Game ended.|
 |`ERROR <text>`|Protocol, chess logic or hardware error.|
 |`BYE`|Backend is shutting down.|
+=======
+| Command | Description |
+|---------|-------------|
+| `CONFIG depth=<1-20> human=<white/black> mode=<human_vs_robot/computer_vs_computer>` | Configure engine depth, human side and operation mode. |
+| `NEW_GAME` | Reset game state to the starting position. |
+| `READY` | Confirm that the physical board is prepared and the game may proceed. |
+| `GET_BEST_MOVE` | Request the next engine/robot move. Valid only when the backend is in engine-turn state. |
+| `ROBOT_MOVE_DONE` | Confirm that MATLAB/UR3 has completed the robot move. |
+| `PROMOTE <q/r/b/n>` | Complete a human promotion after `PROMOTION_REQUIRED`. |
+| `DEBUG_SET_FEN <fen>` | Load a custom FEN position for testing. |
+| `GET_FEN` | Request the current backend FEN. |
+| `STATUS` | Request backend and DGT board status. |
+| `QUIT` | Close the backend session and shut down the server process. |
+
+### Python -> MATLAB
+
+| Message | Description |
+|---------|-------------|
+| `READY_OK` | Backend accepted `READY`. |
+| `BOARD_OK` | DGT board is connected. |
+| `BOARD_ERROR <text>` | DGT board is not connected or another board error occurred. |
+| `STATUS backend=ok board=<ok/error>` | Backend status response. |
+| `FEN <fen>` | Current game position. |
+| `HUMAN_MOVE <uci>` | Legal human move detected from the DGT board. |
+| `ROBOT_MOVE ...` | Full symbolic description of the robot move to execute. |
+| `ROBOT_DONE` | Robot reported that the physical move sequence finished. |
+| `ROBOT_MOVE_FAILED ...` | Physical board state does not match the expected board after robot movement. |
+| `PROMOTION_REQUIRED <uci_base>` | Human pawn reached last rank and requires a promotion piece. |
+| `GAME_OVER <result>` | Game ended. |
+| `ERROR <text>` | Protocol, chess logic or hardware error. |
+| `BYE` | Backend is shutting down. |
+>>>>>>> a8de5059cce868e0258c953179d14acb4cd77afc
 
 \---
 
