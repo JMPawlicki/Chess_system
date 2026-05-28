@@ -29,7 +29,7 @@ function params = robotPieceParams()
     params.pieceZ = struct();
     params.pieceZ.P = 56.0;
     params.pieceZ.N = 41.0;
-    params.pieceZ.B = 63.5;
+    params.pieceZ.B = 63.2;
     params.pieceZ.R = 66.0;
     params.pieceZ.Q = 74.5;
     params.pieceZ.K = 78.0;
@@ -48,12 +48,12 @@ function params = robotPieceParams()
     % Positive value means that the piece is placed slightly less deep
     % along the insert direction, so it ends up closer to the square center.
     
-    params.placeBackoff.P = 5.0;
-    params.placeBackoff.N = 5.0;
+    params.placeBackoff.P = 5.5;
+    params.placeBackoff.N = 6.0;
     params.placeBackoff.B = 5.0;
-    params.placeBackoff.R = 6.0;
-    params.placeBackoff.Q = 6.0;
-    params.placeBackoff.K = 6.5;
+    params.placeBackoff.R = 8.0;
+    params.placeBackoff.Q = 7.0;
+    params.placeBackoff.K = 7.5;
 
     %% Insert vector lengths [mm]
     params.pieceInsertLen = struct();
