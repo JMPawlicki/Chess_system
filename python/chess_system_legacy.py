@@ -2,8 +2,12 @@ import serial
 import time
 import chess
 from stockfish import Stockfish
+import os
 
-stockfish = Stockfish(path="./stockfish/stockfish-windows-x86-64-avx2.exe")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STOCKFISH_PATH = os.path.join(BASE_DIR, "stockfish", "stockfish-windows-x86-64-avx2.exe")
+
+stockfish = Stockfish(path=STOCKFISH_PATH)
 # ===========================
 # Funkcje pomocnicze
 # ===========================
@@ -65,7 +69,7 @@ def initialize_board():
 # ===========================
 # Inicjalizacja DGT Board
 # ===========================
-ser = serial.Serial("COM6", 38400, timeout=0.3)
+ser = serial.Serial("COM5", 38400, timeout=0.3)
 DTG_REQ_UPDATE_BOARD = bytes([0x44])
 
 print("Połączono z DGT, oczekiwanie na ruchy...")
