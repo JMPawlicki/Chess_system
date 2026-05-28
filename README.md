@@ -395,6 +395,14 @@ or update `STOCKFISH_PATH` in the backend accordingly.
 
 ---
 
+## DGT chessboard veryfication
+
+Firstly it is recommended to use `chess_system_legacy.py` to verify wether the DGT chessboard is sending moves via USB Port.
+
+Legacy version allows user to play againts engine using the DGT Chessboard as a transceiver. The human is responsible to make all the moves.
+
+---
+
 ## Notes
 
 - The DGT board must not be opened by another application while the Python backend is running.
