@@ -40,6 +40,8 @@ ChessRobot/
     ├── python_backend_documentation.md
     ├── matlab_functions_documentation.md
     └── gui_documentation.md
+    └── user_guidance_en.md
+    └── user_guidance_pl.md
 ```
 
 ---
@@ -93,6 +95,12 @@ ROBOT_DONE
 ```
 
 to the Python backend after completing a generated URScript sequence. The backend forwards this information to MATLAB over the existing GUI connection.
+
+---
+
+## DGT Chessboard
+
+It is important to notice that, in order for a PC to register DGT Chessboard connection via USB port the DGT e-Board Driver must be installed on computer, from the official DGT sites from the Software Dowloads section.
 
 ---
 

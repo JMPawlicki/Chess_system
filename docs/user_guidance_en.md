@@ -3,6 +3,11 @@
 This document describes the basic procedure for configuring, starting and operating the chess robot system. The system consists of a DGT electronic chessboard, a Python backend, a MATLAB GUI, the Stockfish chess engine and a UR3 robot.
 
 ---
+## DGT e-Board Driver
+
+Before preparing the workstation make sure that the DGT e-Board Driver is installed on the computer
+
+---
 
 ## 1. Preparing the workstation
 

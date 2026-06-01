@@ -4,6 +4,12 @@ Dokument opisuje podstawową procedurę konfiguracji, uruchomienia i obsługi sy
 
 ---
 
+## Sterownik DGT e-Board
+
+Przed przygotowaniem stanowiska proszę się upewnić że sterownik DGT e-Board został zainstalowany na komputerze.
+
+---
+
 ## 1. Przygotowanie stanowiska
 
 Przed uruchomieniem programu należy przygotować stanowisko robocze.
